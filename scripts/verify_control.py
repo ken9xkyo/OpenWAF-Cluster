@@ -47,7 +47,6 @@ def ready(view, rid, nodes=2):
 
 def promote_and_wait(did, rid):
     wait_for(lambda d: any(n['id']=='waf-cluster-1' and n['actual_revision']==rid and n['health']=='healthy' and n['online'] for n in d['nodes']), 'Canary healthy r'+str(rid))
-    call('/api/deployments/'+str(did)+'/promote', 'POST')
     return wait_for(lambda d: ready(d, rid) and any(x['id']==did and x['state']=='complete' for x in d['deployments']), 'Both nodes healthy r'+str(rid))
 
 

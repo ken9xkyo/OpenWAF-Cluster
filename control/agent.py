@@ -116,6 +116,7 @@ def collect_events(state):
                 try:
                     event = json.loads(line)
                     tx = event.get('transaction') or {}
+                    request = tx.get('request') or {}
                     rules = sorted({int(m['data']['id']) for m in (event.get('messages') or [])
                                     if isinstance(m, dict) and (m.get('data') or {}).get('id')})
                     # Coraza's JSON writer may serialize matched-rule metadata
@@ -127,7 +128,11 @@ def collect_events(state):
                         pending.append({'event_key': str(tx.get('id') or sha(line)),
                                         'site_id': int(file.stem.split('-')[1]),
                                         'client_ip': tx.get('client_ip', ''), 'rule_ids': rules[:100],
-                                        'interrupted': bool(tx.get('is_interrupted'))})
+                                        'interrupted': bool(tx.get('is_interrupted')),
+                                        'request_method': str(request.get('method') or '')[:32],
+                                        'request_uri': str(request.get('uri') or '')[:16384],
+                                        'request_host': str(tx.get('server_id') or '')[:512],
+                                        'request_protocol': str(request.get('protocol') or '')[:32]})
                 except (ValueError, TypeError, KeyError):
                     logging.warning('Skipped malformed audit record')
             pos['offset'] = stream.tell()

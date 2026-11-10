@@ -62,6 +62,7 @@ async function saveRuleSelection(){
   const result=await api(`/api/sites/${state.siteId}/rules`,'PATCH',{excluded_rules:[...state.excluded].sort((a,b)=>a-b),exception_reason:state.reason,expected_excluded_rules:state.expected,expected_exception_reason:state.expectedReason});
   state.expected=[...result.excluded_rules];state.expectedReason=result.exception_reason;state.dirty=false;
   const site=data.sites.find(s=>s.id===state.siteId);if(site){site.excluded_rules=[...result.excluded_rules];site.exception_reason=result.exception_reason;}
+  await refresh();
   toast(result.message);
  }catch(error){state.error=error.message;}
  finally{state.saving=false;render();if(state.error){$('#rules-save-error').textContent=state.error;delete state.error;}}

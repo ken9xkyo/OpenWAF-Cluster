@@ -45,3 +45,7 @@ CREATE TABLE IF NOT EXISTS waf_events (
  interrupted boolean NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS waf_events_date ON waf_events(created_at DESC);
+ALTER TABLE waf_events ADD COLUMN IF NOT EXISTS request_method text NOT NULL DEFAULT '';
+ALTER TABLE waf_events ADD COLUMN IF NOT EXISTS request_uri text NOT NULL DEFAULT '';
+ALTER TABLE waf_events ADD COLUMN IF NOT EXISTS request_host text NOT NULL DEFAULT '';
+ALTER TABLE waf_events ADD COLUMN IF NOT EXISTS request_protocol text NOT NULL DEFAULT '';

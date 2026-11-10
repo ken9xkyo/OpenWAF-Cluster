@@ -1,0 +1,28 @@
+{
+  "completed_at_utc": "2026-11-10T07:42:28.464059+00:00",
+  "python_tests": {
+    "passed": 19
+  },
+  "isolated_browser": {
+    "tabs": true,
+    "search": true,
+    "pagination": true,
+    "url_details": true,
+    "legacy_records": true,
+    "html_escaping": true,
+    "mobile_no_overflow": true,
+    "javascript_errors": []
+  },
+  "live_cluster": {
+    "history_search": true,
+    "outcome_filter": true,
+    "request_metadata_both_nodes": true,
+    "live_browser_search_and_detail": true,
+    "nodes_healthy": true,
+    "active_revision": 2
+  },
+  "screenshots": [
+    "waf-events-desktop.png",
+    "waf-audit-mobile.png"
+  ]
+}

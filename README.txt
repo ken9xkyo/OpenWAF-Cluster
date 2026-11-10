@@ -38,9 +38,33 @@ Workflow quản trị:
   2. Phiên bản & triển khai: tạo phiên bản và validate Caddy/Coraza cho cả hai node.
   3. Admin approve phiên bản đã validate.
   4. Canary: áp dụng trên node 1; kiểm tra ứng dụng, agent health và lỗi WAF.
-  5. Triển khai node 2 sau khi canary healthy; trạng thái complete khi cả hai đồng bộ.
-  6. Rollback: chọn revision cũ, canary node 1 rồi triển khai node 2.
+  5. Node 2 tự động triển khai khi heartbeat node 1 healthy, đúng revision và khớp
+     SHA-256 cấu hình; complete khi cả hai node online, healthy, đúng revision/digest.
+  6. Rollback: mở Lịch sử phiên bản, chọn Khôi phục; node 1 trước, node 2 tự động.
   7. Dừng rollout chỉ dừng tiến trình, không tự đổi các node đã apply về policy cũ.
+
+  Phiên bản & triển khai hiển thị cấu hình đang lưu với 5 bước:
+    Nháp → Kiểm tra → Phê duyệt → Thăm dò node 1 → Triển khai node 2.
+  Chỉ hiển thị thao tác tiếp theo phù hợp quyền; node 2 chạy tự động.
+  Mỗi node có revision đang chạy/yêu cầu, heartbeat và trạng thái khớp cấu hình.
+  Bảng website đối chiếu snapshot thực tế trên từng node, chỉ ra trường còn khác
+  (backend, mode, PL, rules, tham số nâng cao...). Website & policy và CRS rules
+  có liên kết Xem tiến trình. Lịch sử phiên bản/triển khai thu gọn bên dưới.
+  Sửa nháp sau khi kiểm tra không dùng lại phê duyệt của cấu hình cũ. Hộp thoại
+  kiểm tra gửi fingerprint nháp; API trả 409 nếu người khác đã sửa trước khi gửi.
+  “Đã triển khai” dựa trên snapshot và heartbeat/digest hiện tại, kể cả khi revision
+  node nằm ngoài 30 phiên bản gần nhất. Lần triển khai complete trong lịch sử
+  không thay thế xác nhận hiện tại khi agent offline, lỗi hoặc cấu hình lệch.
+  Auto-promote ghi audit deployment.auto_promote; các bước deploy, abort và heartbeat
+  dùng cùng advisory transaction lock để tránh tranh chấp khi hai API cùng xử lý.
+  API promote cũ vẫn tương thích, nhưng UI không yêu cầu bấm triển khai node 2.
+  Không cần migration DB mới cho luồng triển khai tự động.
+
+  Kiểm thử luồng mới:
+    /opt/waf-control/venv/bin/python -m unittest discover -s tests -v
+    node scripts/verify_workflow_ui.cjs (Playwright, API giả lập; không đổi WAF)
+    PYTHONPATH=. python scripts/verify_workflow_api.py (DB test riêng, quyền tạo schema;
+    validate Caddy/Coraza thực tế, tự xóa schema test; không gọi agent thật).
 
 Cấu hình Paranoia nâng cao (Website & policy → Chỉnh sửa website):
   PL chặn 1–4 quyết định các cấp rule được cộng điểm để chặn (CRS 4:
@@ -103,7 +127,8 @@ Thêm backend/domain:
   Nếu cần backend khác, chỉnh BACKEND_ALLOWLIST trong /etc/waf-control/control.env
   trên cả hai VM, rồi restart waf-control và waf-agent-api; WAF không cần dừng.
   Domain mới phải có DNS về VIP trước khi cấp chứng thư. Kiểm tra HTTPS của domain
-  mới trước khi promote. Việc cấp/gia hạn ACME được thực hiện trên node 1.
+  mới sau khi node 1 áp dụng. Node 2 tự triển khai và thử lại nếu chứng thư chưa
+  đồng bộ xong. Việc cấp/gia hạn ACME được thực hiện trên node 1.
   HTTP port 80 ưu tiên node 1 (node 2 backup); HTTPS port 443 cân bằng cả hai WAF.
   Chứng thư được đồng bộ qua SSH đã pin host key; reload --force để đọc cert mới.
   Nếu node 1 mất, node 2 dùng cert đã đồng bộ nhưng không tự tiếp quản việc gia hạn.
@@ -135,7 +160,12 @@ Log và dữ liệu:
   Coraza audit: /var/log/coraza/site-*.json, parts AHZ, không ghi body/header đầy đủ.
   Kiểm tra size 15 phút/lần; rotate khi trên 10 MiB, giữ 5 bản.
   Audit có thể chứa matched data trong thông báo rule; chỉ caddy/root đọc log gốc.
-  WebGUI chỉ nhận IP, rule IDs và hành động, không nhận payload/cookie/token.
+  WebGUI nhận IP, rule IDs, hành động, HTTP method/protocol, hostname và URI
+  (gồm query string); không nhận body hoặc headers/cookie. URI có thể chứa dữ liệu
+  do client gửi trong query. Bản ghi cũ không có metadata URL hiển thị thiếu dữ liệu.
+  Hai tab Sự kiện / Audit quản trị tìm kiếm toàn bộ lịch sử, phân trang 25 bản ghi;
+  Sự kiện tìm theo URI, hostname, IP, node, rule ID, method và lọc Blocked/Detected.
+  Chọn Chi tiết để xem URI gốc, đường dẫn và tham số URL đã giải mã.
   Event queue tại agent giới hạn 1.000; log gốc là nguồn khi delivery gián đoạn.
   PostgreSQL chưa cấu hình xóa lịch sử WAF/audit theo thời gian; cần chốt retention
   và tích hợp SIEM trước production. Không cấu hình backup theo yêu cầu POC.

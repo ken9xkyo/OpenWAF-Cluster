@@ -1,0 +1,70 @@
+{
+  "unit_tests": 27,
+  "isolated_api": {
+    "real_caddy_validation": true,
+    "automatic_rollout": true,
+    "digest_guard": true,
+    "abort": true,
+    "stale_draft": true
+  },
+  "mock_browser": {
+    "five_steps": true,
+    "full_interaction": true,
+    "desktop": true,
+    "mobile": true,
+    "viewer_readonly": true
+  },
+  "live_browser": {
+    "login": true,
+    "two_node_status": true,
+    "history_open_preserved": true,
+    "mobile_no_overflow": true,
+    "javascript_errors": []
+  },
+  "deployed_nodes": 2,
+  "status": {
+    "stage": "draft",
+    "pending_sites": 1,
+    "sites": [
+      {
+        "id": 1,
+        "hostname": "test-waf.vtccloud.vn",
+        "nodes": [
+          {
+            "id": "waf-cluster-1",
+            "matches": false,
+            "applied": false,
+            "changed_fields": [
+              "Paranoia level"
+            ]
+          },
+          {
+            "id": "waf-cluster-2",
+            "matches": false,
+            "applied": false,
+            "changed_fields": [
+              "Paranoia level"
+            ]
+          }
+        ],
+        "applied": false
+      }
+    ],
+    "nodes": [
+      {
+        "id": "waf-cluster-1",
+        "actual_revision": 2,
+        "desired_revision": 2,
+        "health": "healthy",
+        "online": true
+      },
+      {
+        "id": "waf-cluster-2",
+        "actual_revision": 2,
+        "desired_revision": 2,
+        "health": "healthy",
+        "online": true
+      }
+    ]
+  }
+}

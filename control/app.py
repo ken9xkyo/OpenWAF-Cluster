@@ -29,6 +29,7 @@ from psycopg.types.json import Jsonb
 
 from control.render import NODES, POLICY_PARAMETERS, render, validate_site
 from control.rules import MAX_RULE_EXCLUSIONS, rule_catalog, rules_by_id, validate_rule_exclusions
+from control.workflow import deployment_status, node_ready, snapshot_digest
 
 app = FastAPI(title='WAF Control', docs_url=None, redoc_url=None, openapi_url=None)
 agent_app = FastAPI(title='WAF Agents', docs_url=None, redoc_url=None, openapi_url=None)
@@ -111,6 +112,7 @@ class Site(BaseModel):
 
 class Note(BaseModel):
     note: str = Field(min_length=3, max_length=500)
+    draft_digest: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
 
 
 class RuleSelection(BaseModel):
@@ -195,11 +197,19 @@ def overview(user=Depends(current_user)):
         sites = conn.execute('SELECT ' + FIELDS + ' FROM sites ORDER BY id').fetchall()
         nodes = conn.execute("SELECT id,address,desired_revision,actual_revision,actual_digest,health,detail,last_seen,"
                              "(last_seen>now()-interval '30 seconds') AS online FROM nodes ORDER BY id").fetchall()
-        revisions = conn.execute('SELECT id,note,created_at,validated,approved_at,digest FROM revisions ORDER BY id DESC LIMIT 30').fetchall()
+        revisions = conn.execute('SELECT id,note,created_at,validated,approved_at,digest,snapshot,configs '
+                                 'FROM revisions ORDER BY id DESC LIMIT 30').fetchall()
+        node_revisions = conn.execute('SELECT id,note,created_at,validated,approved_at,digest,snapshot,configs FROM revisions WHERE id=ANY(%s)',
+                                      ([n['actual_revision'] for n in nodes if n['actual_revision']],)).fetchall()
         deployments = conn.execute('SELECT * FROM deployments ORDER BY id DESC LIMIT 20').fetchall()
         events = conn.execute('SELECT * FROM waf_events ORDER BY id DESC LIMIT 50').fetchall()
         audits = conn.execute('SELECT * FROM audit_events ORDER BY id DESC LIMIT 50').fetchall()
-    return {'sites': sites, 'nodes': nodes, 'revisions': revisions, 'deployments': deployments,
+    known = {r['id']: r for r in node_revisions}
+    known.update({r['id']: r for r in revisions})
+    workflow = deployment_status(sites, nodes, list(known.values()), deployments)
+    public_revisions = [{k: v for k, v in r.items() if k not in ('snapshot', 'configs')} for r in revisions]
+    return {'sites': sites, 'nodes': nodes, 'revisions': public_revisions, 'deployments': deployments,
+            'workflow': workflow,
             'events': events, 'audit': audits, 'server': os.environ.get('NODE_ID', 'controller'),
             'policy_parameters': POLICY_PARAMETERS}
 
@@ -221,7 +231,8 @@ def history(kind: str, q: str = Query(default='', max_length=200),
         # Literal substring search: %, _ and backslash are not wildcards.
         pattern = '%' + q.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
         fields = (['e.id::text', 'e.event_key', 'e.node_id', 'e.site_id::text', 's.hostname',
-                   'e.client_ip', 'e.rule_ids::text'] if kind == 'waf' else
+                   'e.client_ip', 'e.rule_ids::text', 'e.request_method', 'e.request_uri',
+                   'e.request_host', 'e.request_protocol'] if kind == 'waf' else
                   ['e.id::text', 'e.actor', 'e.action', 'e.detail::text'])
         clauses.append('(' + ' OR '.join(field + ' ILIKE %s' for field in fields) + ')')
         params.extend([pattern] * len(fields))
@@ -347,6 +358,8 @@ def validate_configs(configs):
 def revision(data: Note, user=Depends(engineer)):
     with db() as conn:
         sites = conn.execute('SELECT ' + FIELDS + ' FROM sites ORDER BY id').fetchall()
+        if data.draft_digest and data.draft_digest != snapshot_digest(sites):
+            raise HTTPException(409, 'Bản nháp đã thay đổi. Đóng hộp thoại và kiểm tra lại cấu hình mới nhất.')
         if not any(s['enabled'] for s in sites):
             raise HTTPException(422, 'Cần ít nhất một site hoạt động')
         for s in sites:
@@ -411,12 +424,14 @@ def rollback(rid: int, user=Depends(admin)):
 @app.post('/api/deployments/{did}/promote')
 def promote(did: int, user=Depends(admin)):
     with db() as conn:
+        conn.execute('SELECT pg_advisory_xact_lock(11810778209)')
         d = conn.execute("SELECT * FROM deployments WHERE id=%s AND state='canary' FOR UPDATE", (did,)).fetchone()
         if not d:
             raise HTTPException(409, 'Không có lần triển khai thăm dò đang chờ')
-        ready = conn.execute("SELECT 1 FROM nodes WHERE id='waf-cluster-1' AND actual_revision=%s AND health='healthy' "
-                             "AND last_seen>now()-interval '30 seconds'", (d['revision_id'],)).fetchone()
-        if not ready:
+        revision = conn.execute('SELECT id,configs FROM revisions WHERE id=%s', (d['revision_id'],)).fetchone()
+        node = conn.execute("SELECT *, (last_seen>now()-interval '30 seconds') AS online "
+                            "FROM nodes WHERE id='waf-cluster-1'").fetchone()
+        if not node or not node_ready(node, revision):
             raise HTTPException(409, 'Node 1 chưa hoạt động ổn định với đúng phiên bản thăm dò')
         conn.execute("UPDATE nodes SET desired_revision=%s,generation=generation+1 WHERE id='waf-cluster-2'", (d['revision_id'],))
         conn.execute("UPDATE deployments SET state='rollout' WHERE id=%s", (did,))
@@ -427,6 +442,7 @@ def promote(did: int, user=Depends(admin)):
 @app.post('/api/deployments/{did}/abort')
 def abort(did: int, user=Depends(admin)):
     with db() as conn:
+        conn.execute('SELECT pg_advisory_xact_lock(11810778209)')
         conn.execute("UPDATE deployments SET state='aborted' WHERE id=%s AND state IN ('canary','rollout')", (did,))
         conn.execute('UPDATE nodes SET desired_revision=actual_revision,generation=generation+1 WHERE desired_revision IS DISTINCT FROM actual_revision')
         audit(conn, user['username'], 'deployment.abort', {'id': did})
@@ -511,6 +527,10 @@ class WafEvent(BaseModel):
     client_ip: str = Field(max_length=45)
     rule_ids: list[int] = Field(max_length=100)
     interrupted: bool
+    request_method: str = Field(default='', max_length=32)
+    request_uri: str = Field(default='', max_length=16384)
+    request_host: str = Field(default='', max_length=512)
+    request_protocol: str = Field(default='', max_length=32)
 
 
 class Heartbeat(BaseModel):
@@ -524,6 +544,8 @@ class Heartbeat(BaseModel):
 @agent_app.post('/agent/heartbeat')
 def heartbeat(data: Heartbeat, node=Depends(node_identity)):
     with db() as conn:
+        # Serialize lifecycle transitions with deploy/promote/abort and other agents.
+        conn.execute('SELECT pg_advisory_xact_lock(11810778209)')
         conn.execute('UPDATE nodes SET actual_revision=%s,actual_digest=%s,health=%s,detail=%s,last_seen=now() WHERE id=%s',
                      (data.revision, data.digest, data.health, data.detail, node['id']))
         for event in data.events:
@@ -531,17 +553,35 @@ def heartbeat(data: Heartbeat, node=Depends(node_identity)):
                 client_ip = str(ipaddress.ip_address(event.client_ip))
             except ValueError:
                 client_ip = ''
-            conn.execute('INSERT INTO waf_events(event_key,node_id,site_id,client_ip,rule_ids,interrupted) VALUES(%s,%s,%s,%s,%s,%s) ON CONFLICT(event_key) DO NOTHING',
+            conn.execute('INSERT INTO waf_events(event_key,node_id,site_id,client_ip,rule_ids,interrupted,'
+                         'request_method,request_uri,request_host,request_protocol) '
+                         'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(event_key) DO NOTHING',
                          (node['id'] + ':' + event.event_key, node['id'], event.site_id, client_ip,
-                          Jsonb(event.rule_ids), event.interrupted))
-        active = conn.execute("SELECT * FROM deployments WHERE state='rollout' FOR UPDATE").fetchone()
-        if active:
-            count = conn.execute("SELECT count(*) AS n FROM nodes WHERE actual_revision=%s AND health='healthy' "
-                                 "AND last_seen>now()-interval '30 seconds'", (active['revision_id'],)).fetchone()['n']
-            if count == 2:
-                conn.execute("UPDATE deployments SET state='complete',completed_at=now() WHERE id=%s", (active['id'],))
-                audit(conn, 'controller', 'deployment.complete', {'id': active['id']})
+                          Jsonb(event.rule_ids), event.interrupted, event.request_method,
+                          event.request_uri, event.request_host, event.request_protocol))
+        advance_deployment(conn)
     return {'ok': True}
+
+
+def advance_deployment(conn):
+    active = conn.execute("SELECT * FROM deployments WHERE state IN ('canary','rollout') FOR UPDATE").fetchone()
+    if not active:
+        return
+    revision = conn.execute('SELECT id,configs FROM revisions WHERE id=%s', (active['revision_id'],)).fetchone()
+    nodes = conn.execute("SELECT *, (last_seen>now()-interval '30 seconds') AS online FROM nodes ORDER BY id").fetchall()
+    by_id = {n['id']: n for n in nodes}
+    if active['state'] == 'canary':
+        node = by_id.get('waf-cluster-1')
+        if not node or not node_ready(node, revision):
+            return
+        conn.execute("UPDATE nodes SET desired_revision=%s,generation=generation+1 WHERE id='waf-cluster-2'", (revision['id'],))
+        conn.execute("UPDATE deployments SET state='rollout' WHERE id=%s", (active['id'],))
+        audit(conn, 'controller', 'deployment.auto_promote', {'id': active['id'], 'revision': revision['id']})
+        # Wait for a new heartbeat from node 2 after its desired revision changes.
+        return
+    if all(node_id in by_id and node_ready(by_id[node_id], revision) for node_id in NODES):
+        conn.execute("UPDATE deployments SET state='complete',completed_at=now() WHERE id=%s", (active['id'],))
+        audit(conn, 'controller', 'deployment.complete', {'id': active['id']})
 
 
 @app.middleware('http')
