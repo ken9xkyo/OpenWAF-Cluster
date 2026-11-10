@@ -1,0 +1,21 @@
+{
+  "completed_at_utc": "2026-11-10T05:22:39.656633+00:00",
+  "checks": {
+    "authentication_and_csrf": "passed",
+    "backend_allowlist": "passed",
+    "rbac_and_session_revocation": "passed",
+    "signed_manifest_tamper_rejection": "passed",
+    "agent_mtls_required": "passed",
+    "validated_approval_canary_rollout": "passed",
+    "live_https_sqli_blocking": "passed",
+    "https_balances_both_nodes": "passed",
+    "coraza_real_client_ip_and_audit": "passed",
+    "rollback_to_detection_only": "passed",
+    "agent_reconciles_file_drift": "passed",
+    "data_plane_survives_database_outage": "passed",
+    "shared_session_on_secondary_api": "passed",
+    "agent_controller_failover": "passed"
+  },
+  "active_revision": 1,
+  "mode": "DetectionOnly"
+}

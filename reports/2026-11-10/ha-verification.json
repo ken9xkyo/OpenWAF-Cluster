@@ -1,0 +1,14 @@
+{
+  "drain_waf01": "all requests served by waf-cluster-2 with valid TLS and HTTP 200",
+  "waf02_process_failure": {
+    "health_detection_seconds": 8.54,
+    "remaining_node_http": 200
+  },
+  "lb01_failure_vip_to_lb02": {
+    "vip_removal_seconds": 2.53,
+    "additional_https_probe_seconds": 0.13,
+    "http": 200
+  },
+  "completed_at_utc": "2026-11-10T05:25:10.451563+00:00",
+  "final_vip_owner": "waf-cluster-1"
+}

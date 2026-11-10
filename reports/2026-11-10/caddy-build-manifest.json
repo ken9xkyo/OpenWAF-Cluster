@@ -1,0 +1,12 @@
+{
+  "go": "go1.27.3",
+  "go_archive_sha256": "65efbc80fdc1fa2cd2631cad5b481777a68e8725f34e89f50fc6ac714e379b40",
+  "caddy": "v2.11.9",
+  "coraza_caddy": "v2.6.2",
+  "coraza_caddy_commit": "82b47274c867754b5c91285b2671dfb2f6e2690f",
+  "xcaddy": "v0.4.7",
+  "coraza": "v3.8.1",
+  "coraza_coreruleset_bundle": "v4.25.0",
+  "caddy_binary_sha256": "524f3fe65424dda464a34138aa35d8d8d491c9457546fa752c5c50cde53848b4",
+  "deployment_state": "binary installed; site/backend/TLS decisions pending; application service not started"
+}

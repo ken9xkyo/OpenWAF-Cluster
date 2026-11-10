@@ -1,0 +1,206 @@
+{
+  "collected_at_utc": "2026-11-10T04:18:21.212347+00:00",
+  "commands": {
+    "hostname": {
+      "exit_code": 0,
+      "stdout": "waf-cluster-2",
+      "stderr": ""
+    },
+    "os": {
+      "exit_code": 0,
+      "stdout": "PRETTY_NAME=\"Ubuntu 24.04.2 LTS\"\nNAME=\"Ubuntu\"\nVERSION_ID=\"24.04\"\nVERSION=\"24.04.2 LTS (Noble Numbat)\"\nVERSION_CODENAME=noble\nID=ubuntu\nID_LIKE=debian\nHOME_URL=\"https://www.ubuntu.com/\"\nSUPPORT_URL=\"https://help.ubuntu.com/\"\nBUG_REPORT_URL=\"https://bugs.launchpad.net/ubuntu/\"\nPRIVACY_POLICY_URL=\"https://www.ubuntu.com/legal/terms-and-policies/privacy-policy\"\nUBUNTU_CODENAME=noble\nLOGO=ubuntu-logo",
+      "stderr": ""
+    },
+    "kernel": {
+      "exit_code": 0,
+      "stdout": "6.8.0-147-generic",
+      "stderr": ""
+    },
+    "virtualization": {
+      "exit_code": 0,
+      "stdout": "kvm",
+      "stderr": ""
+    },
+    "cpu_count": {
+      "exit_code": 0,
+      "stdout": "8",
+      "stderr": ""
+    },
+    "memory": {
+      "exit_code": 0,
+      "stdout": "total        used        free      shared  buff/cache   available\nMem:           7.8Gi       796Mi       5.2Gi        22Mi       2.1Gi       7.0Gi\nSwap:             0B          0B          0B",
+      "stderr": ""
+    },
+    "disk": {
+      "exit_code": 0,
+      "stdout": "Filesystem     Type   Size  Used Avail Use% Mounted on\ntmpfs          tmpfs  794M  1.2M  793M   1% /run\n/dev/vda1      ext4    48G  7.6G   40G  16% /\ntmpfs          tmpfs  3.9G  4.0K  3.9G   1% /dev/shm\ntmpfs          tmpfs  5.0M     0  5.0M   0% /run/lock\n/dev/vda16     ext4   881M  117M  703M  15% /boot\n/dev/vda15     vfat   105M  6.2M   99M   6% /boot/efi\ntmpfs          tmpfs  794M   12K  794M   1% /run/user/0",
+      "stderr": ""
+    },
+    "interfaces": {
+      "exit_code": 0,
+      "stdout": "lo               UNKNOWN        127.0.0.1/8 ::1/128 \nens3             UP             118.107.78.18/24 fe80::f816:3eff:fe90:49c4/64 \nens8             UP             192.168.11.202/24 metric 100 fe80::f816:3eff:feed:55b9/64 \ndocker0          DOWN           172.17.0.1/16 \nbr-8ec1177c6486  DOWN           172.30.61.1/24 fe80::5c24:8bff:fe1c:cd8f/64",
+      "stderr": ""
+    },
+    "routes": {
+      "exit_code": 0,
+      "stdout": "default via 118.107.78.1 dev ens3 proto static metric 50 onlink \ndefault via 192.168.11.1 dev ens8 proto dhcp src 192.168.11.202 metric 100 \n8.8.8.8 via 192.168.11.1 dev ens8 proto dhcp src 192.168.11.202 metric 100 \n118.107.78.0/24 dev ens3 proto kernel scope link src 118.107.78.18 \n169.254.169.254 via 192.168.11.10 dev ens8 proto dhcp src 192.168.11.202 metric 100 \n172.17.0.0/16 dev docker0 proto kernel scope link src 172.17.0.1 linkdown \n172.30.61.0/24 dev br-8ec1177c6486 proto kernel scope link src 172.30.61.1 linkdown \n192.168.11.0/24 dev ens8 proto kernel scope link src 192.168.11.202 metric 100 \n192.168.11.1 dev ens8 proto dhcp scope link src 192.168.11.202 metric 100 \n192.168.11.10 dev ens8 proto dhcp scope link src 192.168.11.202 metric 100",
+      "stderr": ""
+    },
+    "listeners": {
+      "exit_code": 0,
+      "stdout": "State  Recv-Q Send-Q  Local Address:Port  Peer Address:PortProcess\nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:5000       0.0.0.0:*          \nLISTEN 0      511         127.0.0.1:6000       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:8443       0.0.0.0:*          \nLISTEN 0      4096   192.168.11.202:8085       0.0.0.0:*          \nLISTEN 0      511    192.168.11.202:8080       0.0.0.0:*          \nLISTEN 0      4096    127.0.0.53%lo:53         0.0.0.0:*          \nLISTEN 0      4096          0.0.0.0:443        0.0.0.0:*          \nLISTEN 0      4096          0.0.0.0:22         0.0.0.0:*          \nLISTEN 0      4096          0.0.0.0:80         0.0.0.0:*          \nLISTEN 0      4096       127.0.0.54:53         0.0.0.0:*          \nLISTEN 0      4096        127.0.0.1:36827      0.0.0.0:*          \nLISTEN 0      4096        127.0.0.1:8085       0.0.0.0:*          \nLISTEN 0      4096             [::]:22            [::]:*",
+      "stderr": ""
+    },
+    "haproxy_version": {
+      "exit_code": 0,
+      "stdout": "HAProxy version 2.8.30-0ubuntu0.24.04.2 2026/10/27 - https://haproxy.org/\nStatus: long-term supported branch - will stop receiving fixes around Q2 2028.\nKnown bugs: http://www.haproxy.org/bugs/bugs-2.8.30.html\nRunning on: Linux 6.8.0-147-generic #147-Ubuntu SMP PREEMPT_DYNAMIC Thu Sep 24 11:33:16 UTC 2026 x86_64",
+      "stderr": ""
+    },
+    "nginx_version": {
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "nginx version: nginx/1.30.6"
+    },
+    "docker_version": {
+      "exit_code": 0,
+      "stdout": "Docker version 29.1.3, build 29.1.3-0ubuntu3~24.04.2",
+      "stderr": ""
+    },
+    "caddy_version": {
+      "error": "[Errno 2] No such file or directory: 'caddy'"
+    },
+    "containers": {
+      "exit_code": 0,
+      "stdout": "bunkerweb-inspection-coraza-1\tbunkerweb-coraza-local:500f0fd28ba7\tExited (2) 38 minutes ago\nbunkerweb-inspection-clamav-1\tbda39705e291\tExited (143) 38 minutes ago",
+      "stderr": ""
+    },
+    "packages": {
+      "exit_code": 1,
+      "stdout": "bunkerweb\t1.6.17\ndocker.io\t29.1.3-0ubuntu3~24.04.2\nhaproxy\t2.8.30-0ubuntu0.24.04.2\nkeepalived\t1:2.2.8-1build2\nnginx\t1.30.6-1~noble\nopenssh-server\t1:9.6p1-3ubuntu13.20",
+      "stderr": "dpkg-query: no packages found matching docker-ce"
+    },
+    "service_states": {
+      "exit_code": 0,
+      "stdout": "active\nactive\nactive\ninactive\ninactive\nactive\ninactive",
+      "stderr": ""
+    },
+    "haproxy_validation": {
+      "exit_code": 0,
+      "stdout": "Configuration file is valid",
+      "stderr": ""
+    }
+  },
+  "haproxy_config_summary": [
+    "mode tcp",
+    "option tcplog",
+    "option dontlognull",
+    "listen admin_stats",
+    "bind 127.0.0.1:8085,192.168.11.202:8085",
+    "mode http",
+    "frontend http_in",
+    "bind 0.0.0.0:80",
+    "default_backend waf_http",
+    "frontend https_in",
+    "bind 0.0.0.0:443",
+    "default_backend waf_https",
+    "backend waf_http",
+    "mode tcp",
+    "option httpchk",
+    "http-check send meth GET uri /_lb/healthz ver HTTP/1.1 hdr Host lb-health.internal",
+    "http-check expect status 200",
+    "http-check expect string ok",
+    "server waf01 192.168.11.100:8080 weight 1 check inter 3s fall 3 rise 2 send-proxy-v2 check-send-proxy",
+    "server waf02 192.168.11.202:8080 weight 1 check inter 3s fall 3 rise 2 send-proxy-v2 check-send-proxy",
+    "backend waf_https",
+    "mode tcp",
+    "option httpchk",
+    "http-check send meth GET uri /_lb/healthz ver HTTP/1.1 hdr Host lb-health.internal",
+    "http-check expect status 200",
+    "http-check expect string ok",
+    "server waf01 192.168.11.100:8443 weight 1 check inter 3s fall 3 rise 2 send-proxy-v2 check-send-proxy check-ssl verify none check-sni lb-health.internal",
+    "server waf02 192.168.11.202:8443 weight 1 check inter 3s fall 3 rise 2 send-proxy-v2 check-send-proxy check-ssl verify none check-sni lb-health.internal"
+  ],
+  "keepalived_config_summary": [
+    "vrrp_script chk_haproxy {",
+    "script \"/usr/local/sbin/bw-check-haproxy\"",
+    "interval 2",
+    "fall 2",
+    "rise 2",
+    "vrrp_instance BW_PUBLIC_VIP {",
+    "state BACKUP",
+    "interface ens8",
+    "virtual_router_id 78",
+    "priority 100",
+    "advert_int 1",
+    "nopreempt",
+    "unicast_src_ip 192.168.11.202",
+    "unicast_peer {",
+    "192.168.11.100",
+    "}",
+    "virtual_ipaddress {",
+    "118.107.78.209/24 dev ens3 label ens3:bwvip",
+    "track_script {"
+  ],
+  "haproxy_backend_status": [
+    {
+      "pxname": "waf_http",
+      "svname": "waf01",
+      "status": "DOWN",
+      "check_status": "L7STS",
+      "check_code": "301",
+      "lastchg": "2341",
+      "scur": "0",
+      "stot": "43419"
+    },
+    {
+      "pxname": "waf_http",
+      "svname": "waf02",
+      "status": "DOWN",
+      "check_status": "L7STS",
+      "check_code": "301",
+      "lastchg": "2326",
+      "scur": "0",
+      "stot": "43428"
+    },
+    {
+      "pxname": "waf_http",
+      "svname": "BACKEND",
+      "status": "DOWN",
+      "check_status": "",
+      "check_code": "",
+      "lastchg": "2326",
+      "scur": "0",
+      "stot": "86901"
+    },
+    {
+      "pxname": "waf_https",
+      "svname": "waf01",
+      "status": "DOWN",
+      "check_status": "L7STS",
+      "check_code": "302",
+      "lastchg": "2340",
+      "scur": "0",
+      "stot": "47146"
+    },
+    {
+      "pxname": "waf_https",
+      "svname": "waf02",
+      "status": "DOWN",
+      "check_status": "L7STS",
+      "check_code": "302",
+      "lastchg": "2327",
+      "scur": "0",
+      "stot": "47154"
+    },
+    {
+      "pxname": "waf_https",
+      "svname": "BACKEND",
+      "status": "DOWN",
+      "check_status": "",
+      "check_code": "",
+      "lastchg": "2327",
+      "scur": "0",
+      "stot": "94359"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "scope": "isolated loopback, executed as caddy user; no application traffic",
+  "nodes": {
+    "waf-cluster-1": {
+      "DetectionOnly": {
+        "clean": 200,
+        "sqli": 200,
+        "sqli_rule_logged": true
+      },
+      "On": {
+        "clean": 200,
+        "sqli": 403,
+        "sqli_rule_logged": true
+      }
+    },
+    "waf-cluster-2": {
+      "DetectionOnly": {
+        "clean": 200,
+        "sqli": 200,
+        "sqli_rule_logged": true
+      },
+      "On": {
+        "clean": 200,
+        "sqli": 403,
+        "sqli_rule_logged": true
+      }
+    }
+  }
+}
