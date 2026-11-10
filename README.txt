@@ -61,10 +61,13 @@ Workflow quản trị:
   Không cần migration DB mới cho luồng triển khai tự động.
 
   Kiểm thử luồng mới:
-    /opt/waf-control/venv/bin/python -m unittest discover -s tests -v
+    docker compose --env-file /etc/waf-control/compose.env run --rm --no-deps \
+      -v "$PWD/tests:/app/tests:ro" -v "$PWD/scripts:/app/scripts:ro" control python -m unittest discover -s tests -v
     node scripts/verify_workflow_ui.cjs (Playwright, API giả lập; không đổi WAF)
-    PYTHONPATH=. python scripts/verify_workflow_api.py (DB test riêng, quyền tạo schema;
-    validate Caddy/Coraza thực tế, tự xóa schema test; không gọi agent thật).
+    docker compose --env-file /etc/waf-control/compose.env run --rm --no-deps \
+      -v "$PWD/scripts:/app/scripts:ro" -e DATABASE_URL control python scripts/verify_workflow_api.py
+    Export DATABASE_URL trỏ DB test riêng có quyền tạo schema trước lệnh kiểm tra API;
+    validate Caddy/Coraza thực tế, tự xóa schema test; không gọi agent thật.
 
 Cấu hình Paranoia nâng cao (Website & policy → Chỉnh sửa website):
   PL chặn 1–4 quyết định các cấp rule được cộng điểm để chặn (CRS 4:
@@ -106,15 +109,50 @@ Xem và tùy chọn từng rule (menu CRS rules, hoặc nút Rule của website)
     python3 scripts/build_rule_catalog.py /path/to/coraza-coreruleset/rules
   Đối chiếu phiên bản qua caddy build-info trên cả hai node trước khi cập nhật.
   Kiểm thử xử lý rule thực tế, dùng listener loopback tách biệt:
-    /opt/waf-control/venv/bin/python scripts/verify_rule_runtime.py
+    docker compose --env-file /etc/waf-control/compose.env run --rm --no-deps \
+      -v "$PWD/scripts:/app/scripts:ro" control python scripts/verify_rule_runtime.py
 
 Nâng cấp mã nguồn cho control plane đã có dữ liệu:
   Chạy control/schema.sql bằng PostgreSQL owner trước khi restart API.
   Schema có ALTER TABLE sites ADD COLUMN IF NOT EXISTS crs_settings jsonb
   NOT NULL DEFAULT '{}'; không cần chạy lại bootstrap/seeding/PKI.
-  Cập nhật control/ trong /opt/waf-control/app trên cả hai node, restart
-  waf-control và waf-agent-api. Không cần restart Caddy hay đổi revision WAF.
-  Kiểm thử hồi quy: /opt/waf-control/venv/bin/python -m unittest discover -s tests -v
+  Cập nhật mã nguồn trong repository trên cả hai node rồi chạy:
+    python3 scripts/install_control_compose.py
+  Script build image trước khi chuyển dịch vụ; không đổi revision WAF.
+  Chạy kiểm thử hồi quy bằng container theo lệnh ở trên.
+
+Đóng gói và vận hành control bằng Docker Compose:
+  Trên mỗi node đã provision DB/PKI/Caddy, tại thư mục repository:
+    python3 scripts/install_control_compose.py
+  Cần Docker Engine và Docker Compose hỗ trợ up --wait. Installer lấy UID/GID
+  thực tế của waf-control và caddy, ghi /etc/waf-control/compose.env (0600),
+  đưa binary Caddy/Coraza của node vào image, build dependencies từ lockfile.
+  Build và kiểm tra binary hoàn tất trước khi stop/disable ba unit host.
+  Nếu lần chuyển đầu không healthy, script dỡ container và khôi phục unit cũ.
+  scripts/install_control_services.py vẫn provision identity/PKI rồi gọi Compose;
+  không tạo lại các tiến trình control chạy trực tiếp bằng systemd.
+
+  Compose dùng host network: UI bind 127.0.0.1:9000; agent-api bind IP LAN:9443,
+  giữ mTLS; agent dùng Caddy Admin API trên loopback. Không có port public mới.
+  Container chạy UID/GID cũ, root filesystem read-only, drop tất cả capabilities,
+  no-new-privileges; chỉ mount state/log cần ghi và các khóa cần dùng read-only.
+  CA private key, bootstrap.json và database password không được bake vào image.
+  /etc/waf-control/control.env được nạp khi tạo container. PKI, agent state/LKG,
+  dữ liệu Caddy và log dùng bind mount nên giữ nguyên khi recreate/down.
+  PostgreSQL, Caddy, HAProxy, Keepalived và timer cert/log tiếp tục ở host.
+  Không chạy lại bootstrap_control.py khi chuyển hệ thống đã có dữ liệu.
+
+  Lệnh vận hành (chạy trong thư mục repository trên từng node):
+    docker compose --env-file /etc/waf-control/compose.env ps
+    docker compose --env-file /etc/waf-control/compose.env logs -f --tail 50
+    docker compose --env-file /etc/waf-control/compose.env up -d --no-build --wait
+  restart không đọc lại env_file; khi sửa control.env dùng up -d --force-recreate.
+  Docker được enable khởi động cùng host, restart policy là unless-stopped.
+  Khi cập nhật mã nguồn hoặc Caddy binary, chạy lại installer trên từng node.
+  Có thể docker save/load image sang node còn lại rồi dùng --skip-build;
+  installer luôn kiểm tra SHA-256 binary trong image khớp Caddy trên node.
+  Healthcheck UI và agent-api kiểm tra DB; agent kiểm tra vòng reconcile còn chạy.
+  Xác nhận agent healthy/đúng revision ở WebGUI để kiểm tra kết nối đầy đủ.
 
 Role local:
   Viewer: chỉ đọc. Engineer: sửa nháp, tạo/validate revision.
@@ -125,7 +163,8 @@ Role local:
 Thêm backend/domain:
   Backend hiện được giới hạn 118.107.78.220/32 để ngăn cấu hình tới dịch vụ quản trị.
   Nếu cần backend khác, chỉnh BACKEND_ALLOWLIST trong /etc/waf-control/control.env
-  trên cả hai VM, rồi restart waf-control và waf-agent-api; WAF không cần dừng.
+  trên cả hai VM, rồi chạy docker compose --env-file /etc/waf-control/compose.env
+  up -d --force-recreate control agent-api tại thư mục repository; WAF không cần dừng.
   Domain mới phải có DNS về VIP trước khi cấp chứng thư. Kiểm tra HTTPS của domain
   mới sau khi node 1 áp dụng. Node 2 tự triển khai và thử lại nếu chứng thư chưa
   đồng bộ xong. Việc cấp/gia hạn ACME được thực hiện trên node 1.
@@ -134,18 +173,21 @@ Thêm backend/domain:
   Nếu node 1 mất, node 2 dùng cert đã đồng bộ nhưng không tự tiếp quản việc gia hạn.
 
 Service thường dùng:
-  systemctl status caddy haproxy keepalived waf-control waf-agent-api waf-agent
+  systemctl status caddy haproxy keepalived
+  docker compose --env-file /etc/waf-control/compose.env ps
   systemctl status postgresql@16-main             # chỉ node 1
   systemctl list-timers waf-cert-sync.timer waf-logrotate.timer
-  journalctl -u waf-agent -n 50 --no-pager
+  docker compose --env-file /etc/waf-control/compose.env logs --tail 50 agent
   journalctl -u caddy -n 50 --no-pager
   curl -fsS https://test-waf.vtccloud.vn/ -o /dev/null
   curl -fsS http://127.0.0.1:9000/healthz
 
 Nguồn và cấu hình:
   Repository: /root/OpenWAF-Cluster
-  Runtime code: /opt/waf-control/app/control (root-owned, read-only cho service).
-  Python venv: /opt/waf-control/venv
+  Runtime code: /app/control trong image openwaf-control:local.
+  Ba dịch vụ control, agent-api, agent chạy bằng Docker Compose (compose.yaml).
+  Các unit host waf-control/waf-agent-api/waf-agent được disable và stop.
+  Venv cũ không còn dùng cho ba tiến trình control.
   Caddy binary: /usr/local/bin/caddy
   Caddyfile: /etc/caddy/Caddyfile → /var/lib/caddy/active/Caddyfile
   Agent staging/state/LKG: /var/lib/waf-agent (chỉ phục vụ reconcile/rollback).

@@ -1,0 +1,91 @@
+name: waf-control
+
+x-runtime: &runtime
+  image: openwaf-control:local
+  network_mode: host
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777,size=128m
+  mem_limit: 768m
+  pids_limit: 128
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: '5'
+
+x-api: &api
+  <<: *runtime
+  user: '${CONTROL_UID:?Run scripts/install_control_compose.py}:${CONTROL_GID:?Run scripts/install_control_compose.py}'
+  env_file: /etc/waf-control/control.env
+  volumes:
+    - /etc/waf-control/pki/ca.crt:/etc/waf-control/pki/ca.crt:ro
+    - /etc/waf-control/pki/server.crt:/etc/waf-control/pki/server.crt:ro
+    - /etc/waf-control/pki/server.key:/etc/waf-control/pki/server.key:ro
+    - /etc/waf-control/release-signing.key:/etc/waf-control/release-signing.key:ro
+    - /var/lib/waf-control:/var/lib/waf-control
+
+services:
+  control:
+    <<: *api
+    build:
+      context: .
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9000/healthz', timeout=5)"]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 15s
+
+  agent-api:
+    <<: *api
+    command:
+      - uvicorn
+      - control.app:agent_app
+      - --host
+      - '${NODE_IP:?Run scripts/install_control_compose.py}'
+      - --port
+      - '9443'
+      - --no-proxy-headers
+      - --no-access-log
+      - --ssl-certfile
+      - /etc/waf-control/pki/server.crt
+      - --ssl-keyfile
+      - /etc/waf-control/pki/server.key
+      - --ssl-ca-certs
+      - /etc/waf-control/pki/ca.crt
+      - --ssl-cert-reqs
+      - '2'
+    healthcheck:
+      test: [CMD, python, -m, control.container_health, agent-api]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 15s
+
+  agent:
+    <<: *runtime
+    user: '${CADDY_UID:?Run scripts/install_control_compose.py}:${CADDY_GID:?Run scripts/install_control_compose.py}'
+    working_dir: /var/lib/caddy
+    environment:
+      PYTHONPATH: /app
+      AGENT_CONFIG: /etc/waf-agent/agent.json
+      XDG_DATA_HOME: /var/lib/caddy
+      XDG_CONFIG_HOME: /var/lib/caddy
+    command: [python, -m, control.agent]
+    volumes:
+      - /etc/waf-agent:/etc/waf-agent:ro
+      - /etc/caddy/tls:/etc/caddy/tls:ro
+      - /var/lib/waf-agent:/var/lib/waf-agent
+      - /var/lib/caddy:/var/lib/caddy
+      - /var/log/caddy:/var/log/caddy
+      - /var/log/coraza:/var/log/coraza
+    healthcheck:
+      test: [CMD, python, -m, control.container_health, agent]
+      interval: 15s
+      timeout: 6s
+      retries: 4
+      start_period: 30s

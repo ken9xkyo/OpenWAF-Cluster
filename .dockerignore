@@ -1,0 +1,8 @@
+**
+!Dockerfile
+!control/
+!control/**
+control/**/__pycache__/
+control/**/*.pyc
+!docker/
+!docker/caddy

@@ -1,0 +1,117 @@
+{
+  "verified_at": "2026-11-10T16:33:19.937477+07:00",
+  "before": {
+    "nodes": [
+      {
+        "id": "waf-cluster-1",
+        "actual_revision": 4,
+        "desired_revision": 4,
+        "actual_digest": "705b4954b702642bd7227a2ef9002fb384c4425513b9aaa6a55efda3c5d1d540",
+        "health": "healthy",
+        "online": true
+      },
+      {
+        "id": "waf-cluster-2",
+        "actual_revision": 4,
+        "desired_revision": 4,
+        "actual_digest": "62927a26744beff1fde9c123ef2c707602cb4a74c7ea328bd812c97e5140cb09",
+        "health": "healthy",
+        "online": true
+      }
+    ],
+    "site_count": 1,
+    "caddy_validation": "passed",
+    "https://192.168.11.100:9443": 200,
+    "https://192.168.11.202:9443": 200,
+    "mtls_required": "passed",
+    "protected_https": 200
+  },
+  "after": {
+    "nodes": [
+      {
+        "id": "waf-cluster-1",
+        "actual_revision": 4,
+        "desired_revision": 4,
+        "actual_digest": "705b4954b702642bd7227a2ef9002fb384c4425513b9aaa6a55efda3c5d1d540",
+        "health": "healthy",
+        "online": true
+      },
+      {
+        "id": "waf-cluster-2",
+        "actual_revision": 4,
+        "desired_revision": 4,
+        "actual_digest": "62927a26744beff1fde9c123ef2c707602cb4a74c7ea328bd812c97e5140cb09",
+        "health": "healthy",
+        "online": true
+      }
+    ],
+    "site_count": 1,
+    "caddy_validation": "passed",
+    "https://192.168.11.100:9443": 200,
+    "https://192.168.11.202:9443": 200,
+    "mtls_required": "passed",
+    "protected_https": 200
+  },
+  "configuration_unchanged": true,
+  "containers": {
+    "waf-cluster-1": [
+      {
+        "Name": "waf-control-agent-1",
+        "Service": "agent",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "openwaf-control:local"
+      },
+      {
+        "Name": "waf-control-agent-api-1",
+        "Service": "agent-api",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "openwaf-control:local"
+      },
+      {
+        "Name": "waf-control-control-1",
+        "Service": "control",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "openwaf-control:local"
+      }
+    ],
+    "waf-cluster-2": [
+      {
+        "Name": "waf-control-agent-1",
+        "Service": "agent",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "openwaf-control:local"
+      },
+      {
+        "Name": "waf-control-agent-api-1",
+        "Service": "agent-api",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "openwaf-control:local"
+      },
+      {
+        "Name": "waf-control-control-1",
+        "Service": "control",
+        "State": "running",
+        "Health": "healthy",
+        "Image": "openwaf-control:local"
+      }
+    ]
+  },
+  "legacy_host_units": "inactive and disabled on both nodes",
+  "container_unit_tests": {
+    "run": 27,
+    "passed": 27,
+    "source_catalog_mounted_read_only": true
+  },
+  "container_policy_validation": "passed for both node configs",
+  "container_rule_runtime": {
+    "enabled": 403,
+    "disabled": 200,
+    "re_enabled": 403,
+    "clean": 200
+  }
+}

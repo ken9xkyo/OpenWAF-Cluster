@@ -1,4 +1,5 @@
 """Catalog fidelity, rule selection safety and API permission regression tests."""
+import os
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -32,8 +33,13 @@ class CatalogTests(unittest.TestCase):
         self.assertIn('SecRule TX:EARLY_BLOCKING "@eq 1"', rule['source'])
 
     def test_generated_catalog_matches_installed_sources(self):
-        root = Path('/root/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules')
-        if not root.exists():
+        root = Path(os.environ.get('CRS_RULES_SOURCE',
+                    '/root/go/pkg/mod/github.com/corazawaf/coraza-coreruleset/v4@v4.25.0/rules'))
+        try:
+            available = root.exists()
+        except PermissionError:
+            available = False
+        if not available:
             self.skipTest('Source CRS module is not installed on this host')
         result = build(root)
         catalog = rule_catalog()

@@ -45,54 +45,6 @@ copy('signing.pub', '/etc/waf-agent/signing.pub', 'root', 'caddy', 0o644)
 for name in ['ca.crt', 'agent.crt', 'agent.key']:
     copy(name, '/etc/waf-agent/pki/' + name, 'root', 'caddy', 0o640)
 
-base = '''[Unit]
-After=network-online.target waf-control-firewall.service
-Wants=network-online.target waf-control-firewall.service
-[Service]
-User=waf-control
-Group=waf-control
-WorkingDirectory=/opt/waf-control/app
-EnvironmentFile=/etc/waf-control/control.env
-Restart=on-failure
-RestartSec=3
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/waf-control
-MemoryMax=768M
-UMask=0077
-'''
-commands = {
-    'waf-control': '/opt/waf-control/venv/bin/uvicorn control.app:app --host 127.0.0.1 --port 9000 --no-proxy-headers --no-access-log',
-    'waf-agent-api': '/opt/waf-control/venv/bin/uvicorn control.app:agent_app --host '+ips[node]+' --port 9443 --no-proxy-headers --no-access-log --ssl-certfile /etc/waf-control/pki/server.crt --ssl-keyfile /etc/waf-control/pki/server.key --ssl-ca-certs /etc/waf-control/pki/ca.crt --ssl-cert-reqs 2'
-}
-for name, command in commands.items():
-    Path('/etc/systemd/system/'+name+'.service').write_text(base+'ExecStart='+command+'\n[Install]\nWantedBy=multi-user.target\n')
-Path('/etc/systemd/system/waf-agent.service').write_text('''[Unit]
-Description=Signed configuration pull agent for Caddy
-After=network-online.target caddy.service waf-agent-api.service
-Wants=network-online.target caddy.service
-[Service]
-User=caddy
-Group=caddy
-WorkingDirectory=/opt/waf-control/app
-Environment=AGENT_CONFIG=/etc/waf-agent/agent.json
-Environment=XDG_DATA_HOME=/var/lib/caddy
-Environment=XDG_CONFIG_HOME=/var/lib/caddy
-ExecStart=/opt/waf-control/venv/bin/python -m control.agent
-Restart=always
-RestartSec=5
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/waf-agent /var/lib/caddy /var/log/caddy /var/log/coraza
-MemoryMax=768M
-UMask=0077
-[Install]
-WantedBy=multi-user.target
-''')
-subprocess.run(['systemctl', 'daemon-reload'], check=True)
-subprocess.run(['systemctl', 'enable', '--now', 'waf-control', 'waf-agent-api', 'waf-agent'], check=True)
-print('Control UI/API and mTLS agent services installed on ' + node)
+# Runtime processes are managed only by Docker Compose.
+subprocess.run([sys.executable, str(Path(__file__).with_name('install_control_compose.py'))], check=True)
+print('Control credentials provisioned and Compose services installed on ' + node)
