@@ -1,0 +1,19 @@
+{
+  "feature": "Per-website CRS rule catalog and toggles",
+  "crs_version": "4.25.0",
+  "catalog_rules": 625,
+  "selectable_detection_rules": 341,
+  "unit_and_api_tests": 15,
+  "isolated_database": "selection save/re-enable, conflict 409, immutable revision, RBAC, other site fields unchanged",
+  "ui": "desktop/mobile; search/filter/pagination; raw chain; PL states; reason; save/reopen; site switch; Viewer; no JS errors",
+  "coraza_runtime": "913100 enabled=403, disabled=200, re-enabled=403; clean requests=200",
+  "caddy_validation": "both nodes with 341 exclusions",
+  "runtime_nodes": [
+    "waf-cluster-1",
+    "waf-cluster-2"
+  ],
+  "source_hashes_match": true,
+  "production_sites_and_desired_revisions_unchanged": true,
+  "runtime_backup": "/opt/waf-control/backups/rules-20261110T071550Z",
+  "live_browser": "Login, 625-rule catalog, search, source inspection, logout passed without draft changes or JavaScript errors"
+}

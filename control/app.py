@@ -22,12 +22,13 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 import psycopg
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from control.render import NODES, render, validate_site
+from control.render import NODES, POLICY_PARAMETERS, render, validate_site
+from control.rules import MAX_RULE_EXCLUSIONS, rule_catalog, rules_by_id, validate_rule_exclusions
 
 app = FastAPI(title='WAF Control', docs_url=None, redoc_url=None, openapi_url=None)
 agent_app = FastAPI(title='WAF Agents', docs_url=None, redoc_url=None, openapi_url=None)
@@ -35,7 +36,7 @@ passwords = PasswordHasher()
 attempts = defaultdict(list)
 login_lock = threading.Lock()
 STATIC = Path(__file__).parent / 'static'
-FIELDS = 'id,hostname,backend_ip,backend_port,mode,paranoia,enabled,excluded_rules,exception_reason'
+FIELDS = 'id,hostname,backend_ip,backend_port,mode,paranoia,enabled,excluded_rules,exception_reason,crs_settings'
 
 
 def db():
@@ -102,13 +103,22 @@ class Site(BaseModel):
     backend_port: int = Field(ge=1, le=65535)
     mode: str = 'DetectionOnly'
     paranoia: int = Field(default=1, ge=1, le=4)
+    crs_settings: dict[str, StrictInt] = Field(default_factory=dict)
     enabled: bool = True
-    excluded_rules: list[int] = Field(default_factory=list, max_length=50)
+    excluded_rules: list[StrictInt] = Field(default_factory=list, max_length=MAX_RULE_EXCLUSIONS)
     exception_reason: str = Field(default='', max_length=500)
 
 
 class Note(BaseModel):
     note: str = Field(min_length=3, max_length=500)
+
+
+class RuleSelection(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    excluded_rules: list[StrictInt] = Field(max_length=MAX_RULE_EXCLUSIONS)
+    exception_reason: str = Field(max_length=500)
+    expected_excluded_rules: list[StrictInt] = Field(max_length=MAX_RULE_EXCLUSIONS)
+    expected_exception_reason: str = Field(max_length=500)
 
 
 class UserInput(BaseModel):
@@ -190,7 +200,8 @@ def overview(user=Depends(current_user)):
         events = conn.execute('SELECT * FROM waf_events ORDER BY id DESC LIMIT 50').fetchall()
         audits = conn.execute('SELECT * FROM audit_events ORDER BY id DESC LIMIT 50').fetchall()
     return {'sites': sites, 'nodes': nodes, 'revisions': revisions, 'deployments': deployments,
-            'events': events, 'audit': audits, 'server': os.environ.get('NODE_ID', 'controller')}
+            'events': events, 'audit': audits, 'server': os.environ.get('NODE_ID', 'controller'),
+            'policy_parameters': POLICY_PARAMETERS}
 
 
 @app.get('/api/history/{kind}')
@@ -244,18 +255,58 @@ def site_values(data):
     return values
 
 
+@app.get('/api/rules')
+def list_rules(user=Depends(current_user)):
+    catalog = rule_catalog()
+    return {'version': catalog['version'], 'source_sha256': catalog['source_sha256'],
+            'rules': [{key: value for key, value in rule.items() if key != 'source'}
+                      for rule in catalog['rules']]}
+
+
+@app.get('/api/rules/{rule_id}')
+def get_rule(rule_id: int, user=Depends(current_user)):
+    rule = rules_by_id().get(rule_id)
+    if rule is None:
+        raise HTTPException(404, 'Không có rule trong danh mục CRS hiện tại')
+    return {'version': rule_catalog()['version'], **rule}
+
+
+@app.patch('/api/sites/{site_id}/rules')
+def update_rules(site_id: int, data: RuleSelection, user=Depends(engineer)):
+    try:
+        excluded = validate_rule_exclusions(data.excluded_rules, data.exception_reason)
+    except ValueError as error:
+        raise HTTPException(422, str(error))
+    with db() as conn:
+        site = conn.execute('SELECT excluded_rules,exception_reason FROM sites WHERE id=%s FOR UPDATE',
+                            (site_id,)).fetchone()
+        if not site:
+            raise HTTPException(404, 'Không có site')
+        if (sorted(set(site['excluded_rules'])) != sorted(set(data.expected_excluded_rules)) or
+                site['exception_reason'] != data.expected_exception_reason):
+            raise HTTPException(409, 'Rule của website đã thay đổi. Tải lại danh sách trước khi lưu.')
+        conn.execute('UPDATE sites SET excluded_rules=%s,exception_reason=%s,updated_at=now() WHERE id=%s',
+                     (Jsonb(excluded), data.exception_reason, site_id))
+        audit(conn, user['username'], 'site.update_rules_draft',
+              {'id': site_id, 'before': site['excluded_rules'], 'excluded_rules': excluded,
+               'exception_reason': data.exception_reason, 'crs_version': rule_catalog()['version']})
+    return {'ok': True, 'excluded_rules': excluded, 'exception_reason': data.exception_reason,
+            'message': 'Đã lưu rule vào bản nháp; tạo phiên bản để triển khai.'}
+
+
 @app.post('/api/sites')
 def create_site(data: Site, user=Depends(engineer)):
     s = site_values(data)
     with db() as conn:
         try:
-            row = conn.execute('INSERT INTO sites(hostname,backend_ip,backend_port,mode,paranoia,enabled,excluded_rules,exception_reason) '
-                               'VALUES(%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',
+            row = conn.execute('INSERT INTO sites(hostname,backend_ip,backend_port,mode,paranoia,enabled,excluded_rules,exception_reason,crs_settings) '
+                               'VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id',
                                (s['hostname'], s['backend_ip'], s['backend_port'], s['mode'], s['paranoia'],
-                                s['enabled'], Jsonb(s['excluded_rules']), s['exception_reason'])).fetchone()
+                                s['enabled'], Jsonb(s['excluded_rules']), s['exception_reason'], Jsonb(s['crs_settings']))).fetchone()
         except psycopg.errors.UniqueViolation:
             raise HTTPException(409, 'Tên miền đã tồn tại')
-        audit(conn, user['username'], 'site.create', {'id': row['id'], 'hostname': s['hostname']})
+        audit(conn, user['username'], 'site.create', {'id': row['id'], 'hostname': s['hostname'],
+                                                   'paranoia': s['paranoia'], 'crs_settings': s['crs_settings']})
     return row
 
 
@@ -265,14 +316,15 @@ def update_site(site_id: int, data: Site, user=Depends(engineer)):
     with db() as conn:
         try:
             row = conn.execute('UPDATE sites SET hostname=%s,backend_ip=%s,backend_port=%s,mode=%s,paranoia=%s,enabled=%s,'
-                               'excluded_rules=%s,exception_reason=%s,updated_at=now() WHERE id=%s RETURNING id',
+                               'excluded_rules=%s,exception_reason=%s,crs_settings=%s,updated_at=now() WHERE id=%s RETURNING id',
                                (s['hostname'], s['backend_ip'], s['backend_port'], s['mode'], s['paranoia'], s['enabled'],
-                                Jsonb(s['excluded_rules']), s['exception_reason'], site_id)).fetchone()
+                                Jsonb(s['excluded_rules']), s['exception_reason'], Jsonb(s['crs_settings']), site_id)).fetchone()
         except psycopg.errors.UniqueViolation:
             raise HTTPException(409, 'Tên miền đã tồn tại')
         if not row:
             raise HTTPException(404, 'Không có site')
-        audit(conn, user['username'], 'site.update_draft', {'id': site_id, 'mode': s['mode'], 'hostname': s['hostname']})
+        audit(conn, user['username'], 'site.update_draft', {'id': site_id, 'mode': s['mode'], 'hostname': s['hostname'],
+                                                        'paranoia': s['paranoia'], 'crs_settings': s['crs_settings']})
     return {'ok': True, 'message': 'Đã lưu nháp; chưa thay đổi WAF'}
 
 
@@ -325,7 +377,7 @@ def approve(rid: int, user=Depends(admin)):
         row = conn.execute('UPDATE revisions SET approved_by=%s,approved_at=now() WHERE id=%s AND validated RETURNING id',
                            (user['id'], rid)).fetchone()
         if not row:
-            raise HTTPException(404, 'Revision chưa validate hoặc không tồn tại')
+            raise HTTPException(404, 'Phiên bản chưa được kiểm tra hoặc không tồn tại')
         audit(conn, user['username'], 'revision.approve', {'id': rid})
     return {'ok': True}
 
@@ -334,7 +386,7 @@ def begin_deployment(conn, rid, user, kind):
     conn.execute('SELECT pg_advisory_xact_lock(11810778209)')
     r = conn.execute('SELECT id FROM revisions WHERE id=%s AND approved_at IS NOT NULL AND validated', (rid,)).fetchone()
     if not r:
-        raise HTTPException(409, 'Cần validate và approve trước')
+        raise HTTPException(409, 'Cần kiểm tra và phê duyệt phiên bản trước')
     if conn.execute("SELECT 1 FROM deployments WHERE state IN ('canary','rollout')").fetchone():
         raise HTTPException(409, 'Có deployment đang chạy; hoàn tất hoặc hủy trước')
     row = conn.execute('INSERT INTO deployments(revision_id,created_by,kind) VALUES(%s,%s,%s) RETURNING id',
@@ -361,11 +413,11 @@ def promote(did: int, user=Depends(admin)):
     with db() as conn:
         d = conn.execute("SELECT * FROM deployments WHERE id=%s AND state='canary' FOR UPDATE", (did,)).fetchone()
         if not d:
-            raise HTTPException(409, 'Không có canary đang chờ')
+            raise HTTPException(409, 'Không có lần triển khai thăm dò đang chờ')
         ready = conn.execute("SELECT 1 FROM nodes WHERE id='waf-cluster-1' AND actual_revision=%s AND health='healthy' "
                              "AND last_seen>now()-interval '30 seconds'", (d['revision_id'],)).fetchone()
         if not ready:
-            raise HTTPException(409, 'Canary chưa healthy với đúng revision')
+            raise HTTPException(409, 'Node 1 chưa hoạt động ổn định với đúng phiên bản thăm dò')
         conn.execute("UPDATE nodes SET desired_revision=%s,generation=generation+1 WHERE id='waf-cluster-2'", (d['revision_id'],))
         conn.execute("UPDATE deployments SET state='rollout' WHERE id=%s", (did,))
         audit(conn, user['username'], 'deployment.promote', {'id': did})
@@ -378,7 +430,7 @@ def abort(did: int, user=Depends(admin)):
         conn.execute("UPDATE deployments SET state='aborted' WHERE id=%s AND state IN ('canary','rollout')", (did,))
         conn.execute('UPDATE nodes SET desired_revision=actual_revision,generation=generation+1 WHERE desired_revision IS DISTINCT FROM actual_revision')
         audit(conn, user['username'], 'deployment.abort', {'id': did})
-    return {'ok': True, 'message': 'Đã dừng rollout. Chọn revision cũ để rollback các node đã apply.'}
+    return {'ok': True, 'message': 'Đã dừng triển khai. Chọn phiên bản cũ để khôi phục các node đã áp dụng.'}
 
 
 @app.get('/api/users')

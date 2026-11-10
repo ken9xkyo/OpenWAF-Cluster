@@ -42,6 +42,56 @@ Workflow quản trị:
   6. Rollback: chọn revision cũ, canary node 1 rồi triển khai node 2.
   7. Dừng rollout chỉ dừng tiến trình, không tự đổi các node đã apply về policy cũ.
 
+Cấu hình Paranoia nâng cao (Website & policy → Chỉnh sửa website):
+  PL chặn 1–4 quyết định các cấp rule được cộng điểm để chặn (CRS 4:
+  tx.blocking_paranoia_level). Mỗi cấp bao gồm các rule của cấp thấp hơn.
+  Mở “Cấu hình nâng cao” và chọn riêng từng tham số muốn tùy chỉnh:
+    - PL phát hiện: mặc định bằng PL chặn, phải >= PL chặn và <= 4.
+      Ví dụ PL chặn 1, PL phát hiện 2: chạy thêm rule PL2 để quan sát,
+      chỉ điểm từ PL1 được tính vào quyết định chặn.
+    - Ngưỡng điểm request/response: mặc định 5/4, cho phép 1–10000.
+    - Điểm Critical/Error/Warning/Notice: mặc định 5/4/3/2, cho phép 1–100.
+  Bỏ chọn một tham số để dùng mặc định; “Dùng mặc định cho tất cả” xóa
+  tất cả tùy chỉnh nâng cao, giữ PL chặn và rule exception đã chọn.
+  Ngưỡng response áp dụng cho các response được WAF kiểm tra. DetectionOnly
+  vẫn chỉ ghi nhận. PL cao/tăng điểm có thể tăng cảnh báo nhầm; tăng ngưỡng
+  làm giảm độ nhạy. Các tham số lưu riêng theo website trong crs_settings,
+  đi vào snapshot/revision và rollback như các cấu hình policy khác.
+  Sau khi lưu nháp, tạo/validate phiên bản → approve → canary → node 2.
+
+Xem và tùy chọn từng rule (menu CRS rules, hoặc nút Rule của website):
+  Danh mục gồm 625 rule của OWASP CRS 4.25.0 đang được nhúng trong Caddy,
+  trong đó 341 rule phát hiện có thể bật/tắt. Rule điều khiển nội bộ CRS
+  (khởi tạo, điều hướng PL, tính điểm/chặn, tổng hợp sự kiện) chỉ được xem.
+  Chọn website, tìm theo ID/mô tả/tag, lọc theo nhóm, PL hoặc trạng thái.
+  “Xem rule” hiển thị mô tả, severity, phase, tags, file/dòng nguồn và
+  điều kiện SecLang gốc, bao gồm đầy đủ các điều kiện nối chuỗi.
+  Checkbox cho phép rule chạy theo PL; bỏ chọn để tắt rule theo website.
+  Rule ngoài PL không tự chạy chỉ vì được tích chọn. Trạng thái phân biệt
+  tính điểm chặn, chỉ phát hiện, ngoài PL, đã tắt và rule hệ thống.
+  DetectionOnly luôn hiển thị rule phát hiện là “Chỉ phát hiện”.
+  Nhập lý do khi tắt rule, chọn “Lưu rule vào bản nháp”, rồi triển khai revision
+  theo workflow hiện có. Các lựa chọn được giữ khi lọc/chuyển trang. Khi có
+  người khác sửa danh sách rule trước, API trả 409 và yêu cầu tải lại.
+  API PATCH /api/sites/{id}/rules chỉ cập nhật danh sách ngoại lệ/lý do,
+  giữ nguyên backend, PL, mode và các tham số nâng cao. Audit lưu trước/sau.
+  Viewer được xem danh mục/chi tiết/trạng thái; Engineer và Admin được lưu nháp.
+  Ngoại lệ cũ có ID ngoài danh mục vẫn được giữ và đánh dấu để kiểm tra/bật lại.
+  Danh mục nằm trong control/data/crs-rules.json, kèm CRS-LICENSE.txt.
+  Khi đổi phiên bản CRS nhúng trong Caddy, sinh lại từ đúng nguồn của bản build:
+    python3 scripts/build_rule_catalog.py /path/to/coraza-coreruleset/rules
+  Đối chiếu phiên bản qua caddy build-info trên cả hai node trước khi cập nhật.
+  Kiểm thử xử lý rule thực tế, dùng listener loopback tách biệt:
+    /opt/waf-control/venv/bin/python scripts/verify_rule_runtime.py
+
+Nâng cấp mã nguồn cho control plane đã có dữ liệu:
+  Chạy control/schema.sql bằng PostgreSQL owner trước khi restart API.
+  Schema có ALTER TABLE sites ADD COLUMN IF NOT EXISTS crs_settings jsonb
+  NOT NULL DEFAULT '{}'; không cần chạy lại bootstrap/seeding/PKI.
+  Cập nhật control/ trong /opt/waf-control/app trên cả hai node, restart
+  waf-control và waf-agent-api. Không cần restart Caddy hay đổi revision WAF.
+  Kiểm thử hồi quy: /opt/waf-control/venv/bin/python -m unittest discover -s tests -v
+
 Role local:
   Viewer: chỉ đọc. Engineer: sửa nháp, tạo/validate revision.
   Admin: quản lý tài khoản, approve, deploy, promote, rollback.

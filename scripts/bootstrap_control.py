@@ -135,7 +135,7 @@ with psycopg.connect(dsn) as conn:
     if not conn.execute('SELECT 1 FROM revisions LIMIT 1').fetchone():
         from psycopg.rows import dict_row
         conn.row_factory = dict_row
-        sites = conn.execute('SELECT id,hostname,backend_ip,backend_port,mode,paranoia,enabled,excluded_rules,exception_reason FROM sites ORDER BY id').fetchall()
+        sites = conn.execute('SELECT id,hostname,backend_ip,backend_port,mode,paranoia,enabled,excluded_rules,exception_reason,crs_settings FROM sites ORDER BY id').fetchall()
         rid = conn.execute("SELECT nextval(pg_get_serial_sequence('revisions','id')) AS id").fetchone()['id']
         configs = {node: render(node, sites, str(rid)) for node in NODES}
         digest = hashlib.sha256(json.dumps(configs, sort_keys=True, separators=(',', ':')).encode()).hexdigest()

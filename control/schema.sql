@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS sites (
  excluded_rules jsonb NOT NULL DEFAULT '[]', exception_reason text NOT NULL DEFAULT '',
  updated_at timestamptz NOT NULL DEFAULT now()
 );
+-- Additive migration for existing control-plane databases; safe to reapply.
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS crs_settings jsonb NOT NULL DEFAULT '{}';
 CREATE TABLE IF NOT EXISTS revisions (
  id bigserial PRIMARY KEY, snapshot jsonb NOT NULL, configs jsonb NOT NULL,
  note text NOT NULL, created_by bigint REFERENCES users(id), created_at timestamptz NOT NULL DEFAULT now(),

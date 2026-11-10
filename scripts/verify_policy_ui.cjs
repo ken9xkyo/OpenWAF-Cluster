@@ -1,0 +1,51 @@
+// Run against an isolated control API with a test session supplied by the harness.
+const {chromium}=require('playwright');
+const assert=require('assert');
+(async()=>{
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const errors=[];
+ for(const viewport of [{width:1440,height:1000},{width:390,height:844}]){
+  const page=await browser.newPage({viewport});
+  page.on('pageerror',error=>errors.push(error.message));
+  await page.goto(process.env.POLICY_TEST_URL||'http://127.0.0.1:19001/');
+  await page.locator('[data-page=sites]').click();
+  await page.locator('[data-action=edit-site]').first().click();
+  const details=page.locator('.advanced-policy');
+  if(await details.getAttribute('open')===null)await details.locator('summary').click();
+  assert.equal(await page.locator('[data-policy-toggle]').count(),7);
+  await page.locator('#reset-policy').click();
+  assert.equal(await page.locator('.policy-parameter input[type=number]:disabled').count(),7);
+  await page.locator('[data-policy-toggle=detection_paranoia_level]').check();
+  await page.locator('#policy-detection_paranoia_level').fill('4');
+  await page.locator('[data-policy-toggle=inbound_anomaly_score_threshold]').check();
+  await page.locator('#policy-inbound_anomaly_score_threshold').fill('9');
+  await page.locator('[name=paranoia]').selectOption('3');
+  assert.equal(await page.locator('#policy-detection_paranoia_level').getAttribute('min'),'3');
+  await page.locator('#policy-detection_paranoia_level').fill('2');
+  assert.equal(await page.locator('#editor-form').evaluate(form=>form.checkValidity()),false);
+  await page.locator('#policy-detection_paranoia_level').fill('4');
+  const saved=page.waitForResponse(response=>response.url().includes('/api/sites/')&&response.request().method()==='PUT');
+  await page.locator('#save-dialog').click();
+  assert.equal((await saved).status(),200);
+  await page.locator('#editor').waitFor({state:'hidden'});
+  await page.locator('[data-action=edit-site]').first().click();
+  assert.equal(await page.locator('#policy-detection_paranoia_level').inputValue(),'4');
+  assert.equal(await page.locator('#policy-inbound_anomaly_score_threshold').inputValue(),'9');
+  assert(await page.locator('[data-policy-toggle=detection_paranoia_level]').isChecked());
+  assert(await page.locator('#policy-critical_anomaly_score').isDisabled());
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+  assert(await page.locator('#editor').evaluate(dialog=>dialog.scrollWidth<=dialog.clientWidth));
+  await page.screenshot({path:`/tmp/waf-policy-${viewport.width}.png`,fullPage:true});
+  await page.locator('#reset-policy').click();
+  await page.locator('[name=paranoia]').selectOption('2');
+  assert.equal(await page.locator('#policy-detection_paranoia_level').inputValue(),'2');
+  await page.locator('#save-dialog').click();
+  await page.locator('#editor').waitFor({state:'hidden'});
+  await page.locator('[data-action=edit-site]').first().click();
+  assert.equal(await page.locator('[data-policy-toggle]:checked').count(),0);
+  await page.close();
+ }
+ assert.deepEqual(errors,[]);
+ await browser.close();
+ console.log(JSON.stringify({desktop:true,mobile:true,seven_independent_parameters:true,save_reopen:true,invalid_detection_rejected:true,reset_defaults:true,no_overflow:true,javascript_errors:errors},null,2));
+})().catch(error=>{console.error(error);process.exit(1)});

@@ -1,0 +1,15 @@
+{
+  "feature": "Advanced CRS paranoia settings",
+  "unit_tests": 6,
+  "caddy_coraza_validation": "both nodes; all 7 overrides",
+  "isolated_api": "CRUD, invalid input, immutable revision snapshot, defaults, idempotent migration passed",
+  "coraza_runtime_cases": 5,
+  "ui": "desktop/mobile; save/reopen; reset; validation; no JS errors",
+  "runtime_updated": [
+    "waf-cluster-1",
+    "waf-cluster-2"
+  ],
+  "active_waf_revision": 2,
+  "production_draft_settings": "unchanged",
+  "node_sources_match": true
+}

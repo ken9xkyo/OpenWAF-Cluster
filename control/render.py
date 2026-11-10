@@ -2,7 +2,39 @@
 import ipaddress
 import re
 
+from control.rules import validate_rule_exclusions
+
 NODES = {'waf-cluster-1': '192.168.11.100', 'waf-cluster-2': '192.168.11.202'}
+
+# Supported CRS 4 transaction variables. Only explicitly selected overrides are saved.
+POLICY_PARAMETERS = {
+    'detection_paranoia_level': {'label': 'PL phát hiện', 'default': None, 'min': 1, 'max': 4,
+                               'help': 'Mặc định bằng PL chặn. Có thể chạy thêm rule ở PL cao hơn để theo dõi mà không cộng điểm chặn.'},
+    'inbound_anomaly_score_threshold': {'label': 'Ngưỡng điểm request', 'default': 5, 'min': 1, 'max': 10000,
+                                       'help': 'Chặn khi tổng điểm request đạt ngưỡng và WAF ở chế độ On. Tăng ngưỡng sẽ giảm độ nhạy.'},
+    'outbound_anomaly_score_threshold': {'label': 'Ngưỡng điểm response', 'default': 4, 'min': 1, 'max': 10000,
+                                        'help': 'Ngưỡng cho các rule kiểm tra response khi response được WAF kiểm tra.'},
+    'critical_anomaly_score': {'label': 'Điểm Critical', 'default': 5, 'min': 1, 'max': 100,
+                               'help': 'Điểm cộng khi một rule mức Critical khớp.'},
+    'error_anomaly_score': {'label': 'Điểm Error', 'default': 4, 'min': 1, 'max': 100,
+                            'help': 'Điểm cộng khi một rule mức Error khớp.'},
+    'warning_anomaly_score': {'label': 'Điểm Warning', 'default': 3, 'min': 1, 'max': 100,
+                              'help': 'Điểm cộng khi một rule mức Warning khớp.'},
+    'notice_anomaly_score': {'label': 'Điểm Notice', 'default': 2, 'min': 1, 'max': 100,
+                             'help': 'Điểm cộng khi một rule mức Notice khớp.'},
+}
+
+
+def validate_crs_settings(settings, paranoia):
+    if not isinstance(settings, dict) or settings.keys() - POLICY_PARAMETERS.keys():
+        raise ValueError('Tham số CRS nâng cao không được hỗ trợ')
+    for key, value in settings.items():
+        spec = POLICY_PARAMETERS[key]
+        if type(value) is not int or not spec['min'] <= value <= spec['max']:
+            raise ValueError(f'{spec["label"]} phải là số nguyên từ {spec["min"]} đến {spec["max"]}')
+    if settings.get('detection_paranoia_level', paranoia) < paranoia:
+        raise ValueError('PL phát hiện phải lớn hơn hoặc bằng PL chặn')
+    return settings
 
 
 def hostname(value):
@@ -25,11 +57,8 @@ def validate_site(site, allowed_networks):
         raise ValueError('Chọn DetectionOnly hoặc On')
     if int(site.get('paranoia', 1)) not in {1, 2, 3, 4}:
         raise ValueError('Paranoia level phải từ 1 đến 4')
-    excluded = site.get('excluded_rules', [])
-    if len(excluded) > 50 or any(not isinstance(x, int) or not 100000 <= x <= 999999 for x in excluded):
-        raise ValueError('Danh sách rule exception không hợp lệ')
-    if excluded and not site.get('exception_reason', '').strip():
-        raise ValueError('Cần nhập lý do cho rule exception')
+    site['crs_settings'] = validate_crs_settings(site.get('crs_settings', {}), int(site.get('paranoia', 1)))
+    site['excluded_rules'] = validate_rule_exclusions(site.get('excluded_rules', []), site.get('exception_reason', ''))
     return site
 
 
@@ -78,8 +107,12 @@ def render(node, sites, revision):
                   '                    SecAuditEngine RelevantOnly',
                   '                    SecAuditLogFormat JSON', '                    SecAuditLogParts AHZ',
                   f'                    SecAuditLog /var/log/coraza/site-{site["id"]}.json',
-                  f'                    SecAction "id:100010,phase:1,pass,nolog,setvar:tx.paranoia_level={site.get("paranoia", 1)}"',
-                  '                    Include @owasp_crs/*.conf']
+                  f'                    SecAction "id:100010,phase:1,pass,nolog,setvar:tx.blocking_paranoia_level={int(site.get("paranoia", 1))}"']
+        settings = validate_crs_settings(site.get('crs_settings', {}), int(site.get('paranoia', 1)))
+        for index, key in enumerate(POLICY_PARAMETERS):
+            if key in settings:
+                lines += [f'                    SecAction "id:{100011 + index},phase:1,pass,nolog,setvar:tx.{key}={settings[key]}"']
+        lines += ['                    Include @owasp_crs/*.conf']
         if site.get('excluded_rules'):
             lines += ['                    SecRuleRemoveById ' + ' '.join(str(x) for x in sorted(site['excluded_rules']))]
         lines += ['                `', '            }',

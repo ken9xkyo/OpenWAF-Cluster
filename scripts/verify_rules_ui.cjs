@@ -1,0 +1,56 @@
+// Use an isolated control API; X-Test-Role is supplied only by the test harness.
+const {chromium}=require('playwright');
+const assert=require('assert');
+(async()=>{
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+ const errors=[];
+ for(const viewport of [{width:1440,height:1100},{width:390,height:844}]){
+  const page=await browser.newPage({viewport});
+  await page.request.patch((process.env.RULE_TEST_URL||'http://127.0.0.1:19001/')+'api/sites/1/rules',{data:await (async()=>{const v=await (await page.request.get((process.env.RULE_TEST_URL||'http://127.0.0.1:19001/')+'api/overview')).json();const s=v.sites[0];return {excluded_rules:[],exception_reason:'',expected_excluded_rules:s.excluded_rules,expected_exception_reason:s.exception_reason}})()});page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(process.env.RULE_TEST_URL||'http://127.0.0.1:19001/');
+  await page.locator('[data-page=rules]').click();await page.locator('#rules-workspace').waitFor();
+  const metadata=await page.evaluate(async()=>await (await fetch('/api/rules')).json());
+  assert.equal(metadata.rules.length,625);
+  const pl2=metadata.rules.find(r=>r.selectable&&r.pl===2),pl3=metadata.rules.find(r=>r.selectable&&r.pl===3);
+  await page.locator('#rules-search').fill(String(pl2.id));assert((await page.locator('#rules-results').innerText()).includes('Chỉ phát hiện'));
+  await page.locator('#rules-search').fill(String(pl3.id));assert((await page.locator('#rules-results').innerText()).includes('Ngoài PL'));
+  await page.locator('#rules-search').fill('949110');assert(await page.locator('[data-rule-toggle="949110"]').isDisabled());
+  await page.locator('#rules-search').fill('920170');await page.locator('[data-action=inspect-rule]').click();
+  assert((await page.locator('#dialog-fields pre').innerText()).includes('SecRule REQUEST_HEADERS:Content-Length'));
+  assert((await page.locator('#dialog-fields').innerText()).includes('2 điều kiện'));
+  await page.locator('#save-dialog').click();await page.locator('#editor').waitFor({state:'hidden'});
+  await page.locator('#rules-search').fill('942100');
+  await page.locator('[data-rule-toggle="942100"]').uncheck();
+  assert((await page.locator('#rules-results').innerText()).includes('Đã tắt'));
+  await page.locator('#rules-reason').fill('');await page.locator('[data-action=save-rules]').click();assert((await page.locator('#rules-save-error').innerText()).includes('lý do'));
+  await page.locator('#rules-search').fill('');await page.locator('#rules-group').selectOption('REQUEST-941-APPLICATION-ATTACK-XSS');
+  await page.locator('#rules-pl').selectOption('2');assert((await page.locator('#rules-results').innerText()).includes('XSS'));
+  await page.locator('#rules-group').selectOption('');await page.locator('#rules-pl').selectOption('');
+  await page.locator('[data-rules-page="2"]').click();assert((await page.locator('.rule-pagination').innerText()).includes('Trang 2'));
+  await page.locator('#rules-search').fill('942100');assert.equal(await page.locator('[data-rule-toggle="942100"]').isChecked(),false);
+  await page.locator('#rules-reason').fill('Test false positive, isolated database');
+  const saved=page.waitForResponse(r=>r.url().endsWith('/rules')&&r.request().method()==='PATCH');
+  await page.locator('[data-action=save-rules]').click();assert.equal((await saved).status(),200);
+  await page.locator('[data-action=save-rules]:enabled').waitFor();
+  await page.reload();await page.locator('[data-page=rules]').click();await page.locator('#rules-workspace').waitFor();
+  await page.locator('#rules-search').fill('942100');assert.equal(await page.locator('[data-rule-toggle="942100"]').isChecked(),false);
+  await page.locator('#rules-state').selectOption('disabled');assert((await page.locator('#rules-results').innerText()).includes('942100'));
+  await page.screenshot({path:`/tmp/waf-rules-${viewport.width}.png`,fullPage:true});
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
+  await page.locator('#rules-state').selectOption('');await page.locator('[data-rule-toggle="942100"]').check();
+  await page.locator('[data-action=save-rules]').click();await page.locator('[data-action=save-rules]:enabled').waitFor();
+  await page.locator('[data-rule-toggle="942100"]').uncheck();
+  await page.locator('#rules-site').selectOption('2');await page.locator('#editor').waitFor({state:'visible'});
+  await page.locator('#cancel-dialog').click();assert.equal(await page.locator('#rules-site').inputValue(),'1');
+  await page.locator('#rules-site').selectOption('2');await page.locator('#save-dialog').click();await page.locator('#editor').waitFor({state:'hidden'});
+  assert.equal(await page.locator('#rules-site').inputValue(),'2');
+  await page.close();
+ }
+ const viewer=await browser.newPage({extraHTTPHeaders:{'X-Test-Role':'viewer'}});viewer.on('pageerror',e=>errors.push(e.message));
+ await viewer.goto(process.env.RULE_TEST_URL||'http://127.0.0.1:19001/');await viewer.locator('[data-page=rules]').click();await viewer.locator('#rules-workspace').waitFor();
+ assert.equal(await viewer.locator('[data-action=save-rules]').count(),0);
+ assert.equal(await viewer.locator('[data-rule-toggle]:enabled').count(),0);
+ await viewer.locator('#rules-search').fill('942100');await viewer.locator('[data-action=inspect-rule]').click();assert((await viewer.locator('#dialog-fields pre').innerText()).includes('@detectSQLi'));
+ assert.deepEqual(errors,[]);await browser.close();
+ console.log(JSON.stringify({catalog:625,desktop:true,mobile:true,search_filters_pagination:true,PL_states:true,chain_source:true,selection_preserved:true,reason_required:true,save_reopen_reenable:true,site_switch_confirmation:true,viewer_read_only:true,no_overflow:true,javascript_errors:errors},null,2));
+})().catch(e=>{console.error(e);process.exit(1)});
